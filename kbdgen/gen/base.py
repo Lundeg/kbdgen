@@ -51,6 +51,8 @@ class DesktopLayoutView:
 
     def dead_keys(self):
         o = {}
+        if self._layout.dead_keys is None:
+            return o
         o.update(self._layout.dead_keys.get("desktop", {}))
         o.update(self._layout.dead_keys.get(self._target, {}))
         return o

@@ -86,15 +86,19 @@ class ChromeOSGenerator(PhysicalGenerator):
 
         layouts = {}
         for name, layout in self._bundle.layouts.items():
+            print("==== %s ====" % name)
             layout_view = DesktopLayoutView(layout, "win")
             modes = {}
             for (name, mode) in layout_view.modes().items():
                 modes[name] = replace_iso_keys(mode)
-            print(modes)
-            print(json.dumps(modes, indent=2))
             # Create list to ignore false negatives for different targets
             # dead_key_lists = [v for v in [k.values() for k in layout.dead_keys.values()]]
             # all_dead_keys = set(itertools.chain.from_iterable([k for sublist in dead_key_lists for k in sublist]))
+            print(json.dumps({
+                "deadKeys": layout_view.dead_keys(),
+                "transforms": layout.transforms,
+                "layers": modes
+            }, indent=2, ensure_ascii=False))
             # print(json.dumps(layout.encode(), indent=2, ensure_ascii=False))
             # break
 
