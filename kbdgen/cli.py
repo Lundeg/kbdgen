@@ -1,6 +1,7 @@
 import argparse
 import yaml
 import sys
+import os.path
 
 from . import __version__, gen
 from .base import KbdgenException, Parser, logger, UserException
@@ -87,6 +88,14 @@ def parse_args():
 
     return p.parse_args()
 
+def assert_not_inside_mod(output_dir):
+    abs_output = os.path.abspath(output_dir)
+    abs_current = os.path.abspath(os.path.join(__package__, ".."))
+    
+    if abs_output == abs_current:
+        logger.fatal("Your output directory must NOT be the kbdgen module itself!")
+        logger.fatal("Provided output path: '%s'" % abs_output)
+        sys.exit(1)
 
 def run_cli():
     args = parse_args()
@@ -127,6 +136,7 @@ def run_cli():
 
     x = generator(project, dict(args._get_kwargs()))
 
+    assert_not_inside_mod(x.output_dir)
     try:
         x.generate(x.output_dir)
     except KbdgenException as e:
