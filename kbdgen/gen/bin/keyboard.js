@@ -12,24 +12,28 @@ class Keyboard {
     })
 
     chrome.input.ime.onKeyEvent.addListener((keyboardId, keyData) => {
-      if (keyData.type !== "keydown") {
+      console.log(keyboardId, JSON.stringify(keyData))
+      if (keyData.type === "keydown") {
+        const result = kbd.parseInput(keyboardId, keyData)
+        console.log(result)
+        
+        if (result == null) {
+          // Pass through the default value
+          return false
+        }
+
+        chrome.input.ime.commitText({
+            contextID: contextId,
+            text: result
+        })
+
+        return true
+      } else if (keyData.type === "keyup") {
+        kbd.parseKeyUp(keyData)
         return false
       }
-
-      const result = kbd.parseInput(keyboardId, keyData)
-      console.log(result)
       
-      if (result == null) {
-        // Pass through the default value
-        return false
-      }
-
-      chrome.input.ime.commitText({
-          contextID: contextId,
-          text: result
-      })
-
-      return true
+      return false
     })
   }
 
@@ -187,15 +191,33 @@ class Keyboard {
     }
   }
 
+  handleAltRightKey(code) {
+    if (code === "AltRight") {
+      this.isAltGrKeyHeld = true
+      return true
+    }
+
+    return false
+  }
+
+  parseKeyUp({ code, ctrlKey, shiftKey, capsLock }) {
+    if (code == "AltRight") {
+      this.isAltGrKeyHeld = false
+    }
+  }
+
   parseInput(keyboardId, {
     code,
     ctrlKey,
     shiftKey,
-    capsLock,
-    altKey
+    capsLock
   }) {
     let layerName
     const o = []
+
+    if (this.handleAltRightKey(code)) {
+      return null
+    }
     
     if (capsLock) {
       o.push("caps")
@@ -205,7 +227,7 @@ class Keyboard {
       o.push("ctrl")
     }
 
-    if (altKey) {
+    if (this.isAltGrKeyHeld) {
       o.push("alt")
     }
 

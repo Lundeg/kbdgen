@@ -216,7 +216,8 @@ class ChromeOSGenerator(PhysicalGenerator):
             layout_descriptor = {
                 "deadKeys": layout_view.dead_keys(),
                 "transforms": layout.transforms,
-                "layers": modes
+                "layers": modes,
+                "space": layout_view.space()
             }
 
             layouts[locale] = layout_descriptor

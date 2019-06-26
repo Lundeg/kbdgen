@@ -57,6 +57,14 @@ class DesktopLayoutView:
         o.update(self._layout.dead_keys.get(self._target, {}))
         return o
 
+    def space(self):
+        o = {}
+        if self._layout.space is None:
+            return o
+        o.update(self._layout.space.get("desktop", {}))
+        o.update(self._layout.space.get(self._target, {}))
+        return o
+
 class Generator:
     def __init__(self, bundle, args=None):
         self._bundle = bundle
