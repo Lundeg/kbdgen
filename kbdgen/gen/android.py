@@ -6,6 +6,7 @@ import glob
 import subprocess
 from collections import defaultdict, OrderedDict, namedtuple
 from pathlib import Path
+import json
 
 from lxml import etree
 from lxml.etree import Element, SubElement
@@ -158,6 +159,8 @@ class AndroidGenerator(Generator):
         self.create_gradle_properties(base, self.is_release)
         self.save_files(files, base)
 
+        self.add_layout_json(self.supported_layouts, base)
+
         # Add zhfst files if found
         self.add_zhfst_files(base)
         # self.update_dict_authority(base)
@@ -309,6 +312,23 @@ class AndroidGenerator(Generator):
 
     #     self._update_dict_auth_xml(auth, base)
     #     self._update_dict_auth_java(auth, base)
+
+    def add_layout_json(self, layouts, build_dir):
+        nm = "app/src/main/assets/layouts"
+        json_path = os.path.join(build_dir, "deps", self.REPO, nm)
+        if os.path.exists(json_path):
+            shutil.rmtree(json_path)
+        os.makedirs(json_path, exist_ok=True)
+
+        for locale, layout in layouts.items():
+            logger.info("Adding dead keys and transforms data for '%s'…" % locale)
+            o = {
+                "deadKeys": layout.dead_keys.get("android", {}),
+                "transforms": layout.transforms
+            }
+            o = json.dumps(o, indent=2, ensure_ascii=False)
+            with open(os.path.join(json_path, "%s.json" % locale), 'w') as f:
+                f.write(o)
 
     def add_zhfst_files(self, build_dir):
         nm = "app/src/main/assets/dicts"
@@ -823,11 +843,11 @@ ext.app = [
                 + "alphabetShiftLockShifted",
             )
 
-            self.add_rows(kbd, n, layout_view.mode("shift")[n - 1], style, case)
+            self.add_rows(kbd, n, layout_view.mode("shift")[n - 1], style, case, "shift")
 
             default = self._subelement(switch, "default")
 
-            self.add_rows(kbd, n, layout_view.mode("default")[n - 1], style, default)
+            self.add_rows(kbd, n, layout_view.mode("default")[n - 1], style, default, "default")
 
             yield (
                 "rowkeys_%s%s.xml" % (name.lower(), n),
@@ -868,7 +888,11 @@ ext.app = [
             if action.row == n and action.position in [side, "both"]:
                 self.add_button_type(key, action, row, tree, is_start)
 
-    def add_rows(self, kbd, n, values, style, out):
+    def _is_dead_key(self, kbd, mode, key):
+        # TODO: use LayoutView
+        return key in kbd.dead_keys.get("android", {}).get(mode, [])
+
+    def add_rows(self, kbd, n, values, style, out, mode):
         i = 1
 
         show_number_hints = self.layout_target(kbd).get("showNumberHints", True)
@@ -882,6 +906,10 @@ ext.app = [
             # If top row, and between 0 and 9 keys, show numeric hint
             is_numeric = n == 1 and i > 0 and i <= 10
             show_glyph_hint = more_keys is not None
+
+            if self._is_dead_key(kbd, mode, key):
+                logger.debug("Dead key: %r %r" % (mode, key))
+                self._attrib(node, deadKey="true")
 
             if show_glyph_hint:
                 self._attrib(
