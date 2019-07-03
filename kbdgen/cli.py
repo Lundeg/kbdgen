@@ -2,6 +2,7 @@ import argparse
 import yaml
 import sys
 import os.path
+import logging
 
 from . import __version__, gen
 from .base import KbdgenException, Parser, logger, UserException
@@ -97,9 +98,19 @@ def assert_not_inside_mod(output_dir):
         logger.fatal("Provided output path: '%s'" % abs_output)
         sys.exit(1)
 
+def enable_verbose_requests_log():
+    from http.client import HTTPConnection
+    HTTPConnection.debuglevel = 1
+    requests_log = logging.getLogger("urllib3")
+    requests_log.setLevel(logging.DEBUG)
+    requests_log.propagate = True
+
 def run_cli():
     args = parse_args()
     logger.setLevel(args.logging)
+
+    if args.logging == logging.TRACE:
+        enable_verbose_requests_log()
 
     try:
         project = Parser().parse(args.project, args.cfg_pairs)

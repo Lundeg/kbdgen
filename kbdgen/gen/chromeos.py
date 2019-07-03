@@ -4,6 +4,8 @@ import json
 import os
 import os.path
 import shutil
+import requests
+import tempfile
 
 from ..base import get_logger
 from .base import PhysicalGenerator, run_process, DesktopLayoutView, bind_iso_keys
@@ -94,6 +96,12 @@ def replace_iso_keys(obj):
             del o[k]
     return o
 
+ICONS = {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+}
+
 class ChromeOSGenerator(PhysicalGenerator):
     @property
     def supported_layouts(self):
@@ -102,6 +110,10 @@ class ChromeOSGenerator(PhysicalGenerator):
             if "chrome" in v.modes or "desktop" in v.modes:
                 o[k] = v
         return o
+
+    @property
+    def chrome_target(self):
+        return self._bundle.targets.get("chrome", {})
     
     def layout_target(self, layout):
         if layout.targets is not None:
@@ -154,6 +166,15 @@ class ChromeOSGenerator(PhysicalGenerator):
 
             components.append(component)
 
+        # Google isn't smart enough to fall back to English if a field is missing.
+        for locale, obj in messages.items():
+            if locale == "en":
+                continue
+            if obj.get("name", None) is None:
+                obj["name"] = messages["en"]["name"]
+            if obj.get("description", None) is None:
+                obj["description"] = messages["en"]["description"]
+
         manifest = {
             "name": "__MSG_name__",
             "version": "1.0",
@@ -166,7 +187,8 @@ class ChromeOSGenerator(PhysicalGenerator):
                 "input"
             ],
             "input_components": components,
-            "default_locale": "en"
+            "default_locale": "en",
+            "icons": ICONS
         }
 
         return {
@@ -177,11 +199,87 @@ class ChromeOSGenerator(PhysicalGenerator):
     def open_w(self, *args):
         return open(os.path.join(*args), 'w', encoding="utf-8")
 
+    @property
+    def chrome_resources(self):
+        return self._bundle.resources("chrome")
+
+    def generate_icons(self, build_dir):
+        icon = os.path.join(self.chrome_resources, "icon.png")
+
+        if not os.path.exists(icon):
+            logger.warning("no icon supplied!")
+            return
+
+        cmd_tmpl = "convert -resize {h}x{w} -background white -alpha remove -gravity center -extent {h}x{w} {src} {out}"
+        work_items = []
+
+        for size, fn in ICONS.items():
+            h = float(size)
+            w = h
+            cmd = cmd_tmpl.format(h=h, w=w, src=icon, out=os.path.join(build_dir, fn))
+
+            msg = "Creating '%s' from '%s'…" % (fn, icon)
+            work_items.append((msg, run_process(cmd.split(" "), return_process=True)))
+
+        for (msg, process) in work_items:
+            logger.info(msg)
+            process.wait()
+
+    @property
+    def app_id(self):
+        return self._app_id
+        
+    def sanity_check(self):
+        if self.is_release:
+            if os.environ.get("CHROME_CLIENT_ID", None) is None:
+                logger.error("No `CHROME_CLIENT_ID` env var specified; cannot publish package to Chrome Web Store.")
+                return False
+
+            if os.environ.get("CHROME_CLIENT_SECRET", None) is None:
+                logger.error("No `CHROME_CLIENT_SECRET` env var specified; cannot publish package to Chrome Web Store.")
+                return False
+
+            if os.environ.get("CHROME_REFRESH_TOKEN", None) is None:
+                logger.error("No `CHROME_REFRESH_TOKEN` env var specified; cannot publish package to Chrome Web Store.")
+                return False
+
+            self._app_id = self.chrome_target.get("appId", None)
+            if self._app_id is None:
+                logger.error("No appId found in `chrome` target configuration; cannot publish.")
+                return False
+
+        return super().sanity_check()
+
+    def upload_package(self, build_dir):
+        data = {
+            "grant_type": "refresh_token",
+            "client_id": os.environ["CHROME_CLIENT_ID"],
+            "client_secret": os.environ["CHROME_CLIENT_SECRET"],
+            "refresh_token": os.environ["CHROME_REFRESH_TOKEN"]
+        }
+
+        oauth_response = requests.post("https://www.googleapis.com/oauth2/v4/token", data=data).json()
+
+        logger.info("Generating .zip for upload…")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = "%s/upload-%s.zip" % (tmpdir, self.app_id)
+            logger.trace("p: %r, b: %r" % (p, build_dir))
+            run_process(["zip", "-r9", p, "."], cwd=build_dir, show_output=True)
+
+            url = "https://www.googleapis.com/upload/chromewebstore/v1.1/items/%s" % self.app_id
+            headers = {
+                "Authorization": "Bearer %s" % oauth_response["access_token"],
+                "x-goog-api-version": "2"
+            }
+            logger.info("Uploading…")
+            result = requests.put(url, headers=headers, data=open(p, 'rb').read())
+            logger.debug("%r" % result)
+
     def generate(self, base="."):
         if not self.sanity_check():
             return
 
-        deps_dir = os.path.join(base, "chrome-build")
+        deps_dir = os.path.join(os.path.abspath(base), "chrome-build")
         os.makedirs(deps_dir, exist_ok=True)
 
         logger.info("Generating manifest and i18n files…")
@@ -239,7 +337,11 @@ class ChromeOSGenerator(PhysicalGenerator):
         with self.open_w(deps_dir, "background.js") as f:
             f.write(background_js)
 
+        logger.info("Generating icons…")
+        self.generate_icons(deps_dir)
+
         if self.is_release:
-            raise NotImplementedError()
+            self.upload_package(deps_dir)
+        logger.info("Done!")
 
 
