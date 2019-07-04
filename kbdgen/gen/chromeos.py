@@ -275,6 +275,8 @@ class ChromeOSGenerator(PhysicalGenerator):
             result = requests.put(url, headers=headers, data=open(p, 'rb').read())
             logger.debug("%r" % result)
 
+            shutil.copyfile(p, os.path.join(build_dir, "..", "chrome-%s.zip" % self.app_id))
+
     def generate(self, base="."):
         if not self.sanity_check():
             return

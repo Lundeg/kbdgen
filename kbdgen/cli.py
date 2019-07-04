@@ -3,6 +3,7 @@ import yaml
 import sys
 import os.path
 import logging
+import platform
 
 from . import __version__, gen
 from .base import KbdgenException, Parser, logger, UserException
@@ -105,9 +106,16 @@ def enable_verbose_requests_log():
     requests_log.setLevel(logging.DEBUG)
     requests_log.propagate = True
 
+def print_diagnostics():
+    logging.debug("Python version: %r" % " ".join(sys.version.split("\n")))
+    logging.debug("Platform: %r" % platform.platform())
+
+
 def run_cli():
     args = parse_args()
     logger.setLevel(args.logging)
+
+    print_diagnostics()
 
     if args.logging == logging.TRACE:
         enable_verbose_requests_log()
