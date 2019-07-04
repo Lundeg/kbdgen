@@ -21,6 +21,6 @@ generators = OrderedDict(
         ("json", JSONGenerator),
         ("qr", QRGenerator),
         ("errormodel", ErrorModelGenerator),
-        ("chromeos", ChromeOSGenerator),
+        ("chrome", ChromeOSGenerator),
     )
 )
