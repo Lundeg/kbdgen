@@ -177,7 +177,8 @@ class ChromeOSGenerator(PhysicalGenerator):
 
         manifest = {
             "name": "__MSG_name__",
-            "version": "1.0",
+            "version": self.chrome_target.get("build", 1),
+            "version_name": self.chrome_target.get("version", "0.0.0"),
             "manifest_version": 2,
             "description": "__MSG_description__",
             "background": {
@@ -231,6 +232,14 @@ class ChromeOSGenerator(PhysicalGenerator):
         
     def sanity_check(self):
         if self.is_release:
+            if self.chrome_target.get("build", None) is None:
+                logger.error("No `build` property found in chrome target; cannot generator.")
+                return False
+
+            if self.chrome_target.get("version", None) is None:
+                logger.error("No `version` property found in chrome target; cannot generator.")
+                return False
+
             if os.environ.get("CHROME_CLIENT_ID", None) is None:
                 logger.error("No `CHROME_CLIENT_ID` env var specified; cannot publish package to Chrome Web Store.")
                 return False
